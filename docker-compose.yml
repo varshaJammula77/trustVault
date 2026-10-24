@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: trustvault
+      POSTGRES_USER: trustvault
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trustvault-local-only}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trustvault -d trustvault"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/trustvault
+      DATABASE_USERNAME: trustvault
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-trustvault-local-only}
+      JWT_SECRET: ${JWT_SECRET:-local-development-only-change-this-secret-before-deployment-1234567890}
+      STORAGE_DIR: /app/data/files
+    ports:
+      - "8081:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - files:/app/data/files
+  web:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+volumes:
+  pgdata:
+  files:

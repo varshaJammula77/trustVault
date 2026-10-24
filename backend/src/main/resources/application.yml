@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/trustvault}
+    username: ${DATABASE_USERNAME:trustvault}
+    password: ${DATABASE_PASSWORD:trustvault}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: never
+trustvault:
+  jwt-secret: ${JWT_SECRET:change-this-to-a-64-byte-random-secret-before-production-please}
+  storage-dir: ${STORAGE_DIR:./data/files}
+  allowed-types: application/pdf,image/png,image/jpeg,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  max-file-size: 10485760
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
