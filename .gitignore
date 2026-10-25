@@ -22,3 +22,6 @@ data/
 .vscode/
 .DS_Store
 Thumbs.db
+
+audit_events_backup.sql
+audit_events_before_migration.sql
