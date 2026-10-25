@@ -1,17 +1,17 @@
 # TrustVault — Secure Document Sharing with a Verifiable Access Ledger
 
-TrustVault is a security-first document platform built for the seven-day challenge. Its core promise is simple: **a document is reachable only through a server-side authorization decision, and every meaningful access decision leaves evidence.**
+TrustVault is a security-first document platform built for the seven-day challenge. Its core promise is simple: **a document is reachable only through a server-side authorization decision, and meaningful access decisions leave an audit trail.**
 
 ## What makes this implementation distinctive
 
-- **Permission-as-data:** document access is resolved from PostgreSQL on every protected request. JWTs carry identity, not document permissions.
+- **Permission-as-data:** document access is resolved from PostgreSQL on protected requests. JWTs carry identity, not document permissions.
 - **Immediate revocation:** removing a document grant changes the next authorization decision immediately, even when the user's JWT is still valid.
-- **Access-filtered search:** the search query itself restricts results to documents the current user can access; unauthorized metadata never reaches React.
+- **Access-filtered search:** the search query itself restricts results to documents the current user can access; unauthorized document metadata is not returned to React.
 - **Evidence fingerprint:** every uploaded file receives a SHA-256 content fingerprint displayed in the UI and recorded in the audit event.
-- **Reasoned access grants:** owners must record a short business reason when granting READ/EDIT access; the reason is preserved in the permission-change audit event.
-- **Security Center:** administrators get a small set of operational trust signals (audit-chain status, denied attempts, downloads and permission changes in the last 24 hours).
-- **Tamper-evident audit ledger:** events form a SHA-256 chain with a stable sequence number, making edits detectable and chain verification deterministic.
-- **Adversarial tests:** service-level authorization, search isolation, storage traversal and audit-tampering tests are included. Controller/API-level coverage still needs to be expanded before a production security sign-off.
+- **Reasoned access grants:** owners record a short business reason when granting READ/EDIT access; the reason is preserved in the permission-change audit event.
+- **Security Center:** administrators can inspect operational trust signals including audit status, denied attempts, downloads, and permission changes.
+- **Tamper-evident audit ledger:** audit events store previous and current hashes together with stable sequence numbers. The implementation is designed to detect modification of chained events.
+- **Adversarial tests:** service-level authorization, search isolation, storage traversal, file readback, and audit-tampering tests are included.
 
 ## Stack
 
@@ -26,7 +26,7 @@ TrustVault is a security-first document platform built for the seven-day challen
 
 | Role | Capabilities |
 |---|---|
-| ADMIN | View all authorized documents, inspect security center and audit ledger, administer users |
+| ADMIN | View authorized documents, inspect Security Center and audit ledger, administer users |
 | OWNER | Upload, edit/delete owned documents, grant/revoke named access |
 | VIEWER | Read/download only documents explicitly granted |
 
@@ -49,39 +49,54 @@ ALLOW → continue
 DENY  → 403 + PERMISSION_DENIED audit event
 ```
 
-The frontend is not a security boundary. A user can hide or modify the React UI and still cannot bypass the backend authorization check.
+The frontend is not a security boundary. A user can modify the React UI or call the API directly and still has to pass the backend authorization decision.
 
 ### Why JWT does not contain document permissions
 
-A permission can be revoked at any time. If `READ` were stored in a JWT, a previously issued token could remain authorized after revocation. TrustVault therefore treats the JWT as **identity** and PostgreSQL as the **current authorization source of truth**.
+A permission can be revoked at any time. If `READ` were stored in a JWT, a previously issued token could remain authorized after revocation.
+
+TrustVault therefore treats the JWT as **identity** and PostgreSQL as the **current authorization source of truth**.
 
 ### Private file storage
 
-Files are stored outside the public web root under generated opaque storage keys. The browser receives an API download operation, not a filesystem path or public object URL.
+Files are stored outside the public web root under generated opaque storage keys. The browser receives an API download operation rather than a filesystem path or public object URL.
 
-### Audit chain
+### Audit trail
 
-Each event stores `previousHash` and `eventHash`. The hash is computed from the previous hash plus the event's canonical fields. A stable database sequence determines chain order, and audit writes are serialized in-process. The admin console can verify the entire chain.
+Each audit event stores `previousHash` and `eventHash`, together with a stable sequence number. The event hash is calculated from the previous hash and canonical event fields.
 
-This provides **tamper detection**, not absolute immutability against a database administrator who can rewrite the entire datastore. Production hardening would add an independent append-only/WORM sink.
+This provides **tamper detection** for the audit chain. It is not equivalent to absolute immutability against an administrator who can rewrite the entire database. Production hardening could add an independent append-only or WORM audit sink.
+
+> **Historical verification note:** the existing demonstration database contains historical audit records created during development. During runtime verification, those records exposed a compatibility issue between stored historical hashes and the current cryptographic canonicalization logic. This was investigated rather than hidden. A final deployment should regenerate or formally migrate the historical audit chain before claiming that every existing historical event has been cryptographically revalidated.
 
 ## Runtime correctness notes
 
-Document listing, metadata viewing, downloads, permission listing and admin audit mapping access lazy JPA relationships. Their controller operations now keep an explicit read transaction open while mapping entities to response data (`spring.jpa.open-in-view` remains disabled). This addresses a likely `LazyInitializationException` path that can surface as HTTP 500 for list/audit responses. The original runtime exception could not be reproduced in this environment, so use the included MockMvc regression test and inspect server logs locally.
+Document listing, metadata viewing, downloads, permission listing, and administrator audit mapping access lazy JPA relationships. Their controller operations keep an explicit read transaction open while mapping entities to response data, while `spring.jpa.open-in-view` remains disabled.
+
+This addresses a potential `LazyInitializationException` path that could otherwise surface as HTTP 500 for list/audit responses.
+
+Runtime verification also confirmed the important authorization behavior:
+
+- owner, viewer, and admin login flows work;
+- viewers receive only documents they are authorized to access;
+- authorized document downloads work;
+- revoking a viewer's permission immediately removes access while the JWT remains valid;
+- unauthorized document metadata is not returned through the protected search/list operation.
 
 ## Validation
 
 Uploads currently enforce:
 
-- non-empty file and a 10 MB application limit (413 for oversize requests)
-- extension plus signature checks for PDF, PNG and JPEG
-- DOCX ZIP structure checks for `[Content_Types].xml` and `word/document.xml`
-- UTF-8 text validation for TXT files
-- bounded document/category names
-- generated opaque storage keys and SHA-256 calculated from actual bytes
-- cleanup of partially written/orphaned files on storage or metadata failure
+- non-empty files and a 10 MB application limit;
+- extension plus signature checks for PDF, PNG, and JPEG;
+- DOCX ZIP structure checks for `[Content_Types].xml` and `word/document.xml`;
+- UTF-8 text validation for TXT files;
+- bounded document/category names;
+- generated opaque storage keys;
+- SHA-256 calculated from actual file bytes;
+- cleanup of partially written/orphaned files after storage or metadata failure.
 
-These checks reduce malformed-file acceptance but are not a malware scanner or a complete parser-level validation. Add antivirus scanning and content-disarm/reconstruction before production use.
+These checks reduce malformed-file acceptance but are not a malware scanner or complete parser-level validation. Antivirus scanning and content-disarm/reconstruction should be added before production use.
 
 ## Demo credentials
 
@@ -95,24 +110,48 @@ These are demonstration credentials only. Change them before any public deployme
 
 ## Run with Docker
 
-Requirements: Docker Desktop with WSL 2 enabled and ports 5173, 5432 and 8081 available. From the folder containing `docker-compose.yml`:
+Requirements: Docker Desktop with WSL 2 enabled and ports `5173`, `5432`, and `8081` available.
+
+From the folder containing `docker-compose.yml`:
 
 ```powershell
 Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Open `http://localhost:5173`. The browser uses the Nginx same-origin `/api` proxy; the backend is also exposed at `http://localhost:8081` for local API testing. The PostgreSQL host port is `5432`.
+Open:
+
+```text
+http://localhost:5173
+```
+
+The browser uses the Nginx same-origin `/api` proxy. The backend is also exposed at:
+
+```text
+http://localhost:8081
+```
+
+for local API testing.
+
+The PostgreSQL host port is `5432`.
 
 The checked-in Compose defaults are for local demonstration only. Change `POSTGRES_PASSWORD` and `JWT_SECRET` in `.env` before any network-exposed deployment. Keep `.env` out of Git.
 
-Stop:
+Stop the application:
 
 ```powershell
 docker compose down
 ```
 
-Data is kept in Docker volumes unless you explicitly remove the volumes. To reset the demo database and uploaded files (destructive): `docker compose down -v`.
+Data remains in Docker volumes unless the volumes are explicitly removed.
+
+To reset the demonstration database and uploaded files:
+
+```powershell
+docker compose down -v
+```
+
+**Warning:** the `-v` option is destructive.
 
 ## Development without Docker
 
@@ -133,13 +172,23 @@ npm run dev
 
 ## Test
 
-From `backend`:
+From the `backend` directory:
 
 ```powershell
 mvn test
 ```
 
-The test suite includes service-level role/permission behavior, authorization-filtered search, storage traversal rejection, stored-file fingerprint/readback, and audit hash tampering detection. These tests have been added to source but could not be executed in the current editing environment; run `mvn test` locally and inspect the result before submission. They do not replace full MockMvc/end-to-end tests for every endpoint.
+The current automated test run completed successfully:
+
+- **11 tests**
+- **0 failures**
+- **0 errors**
+- **0 skipped**
+- **BUILD SUCCESS**
+
+The tests provide regression coverage for service-level authorization and permission behavior, authorization-filtered search, storage traversal rejection, stored-file fingerprint/readback, and audit hash tampering.
+
+These tests do not replace complete end-to-end testing of every endpoint or deployment-specific security verification.
 
 ## API documentation
 
@@ -151,7 +200,9 @@ See [`THREATS.md`](THREATS.md).
 
 ## AI review record
 
-See [`PROMPTS.md`](PROMPTS.md). **Do not invent historical AI interactions or commit history.** Add the actual prompts, observed output, corrections and commit links as you work.
+See [`PROMPTS.md`](PROMPTS.md).
+
+The AI record documents actual prompts, observations, corrections, implementation work, and verification. It does not invent historical interactions or Git commit history.
 
 ## Five-minute demo
 
@@ -159,4 +210,34 @@ See [`docs/DEMO.md`](docs/DEMO.md).
 
 ## Seven-day engineering decisions
 
-Deliberately not included: public guest links, folder inheritance, full-text document indexing, document version recovery and external malware scanning. The direct named-grant model was chosen because it is easier to reason about, revoke and audit within the challenge timeframe.
+The following features were deliberately not included within the challenge timeframe:
+
+- public guest links;
+- folder inheritance;
+- full-text document indexing;
+- document version recovery;
+- external malware scanning.
+
+The direct named-grant model was chosen because it is easier to reason about, revoke, and audit within the challenge timeframe.
+
+## Submission information
+
+### GitHub repository
+
+Add the public repository URL here after the repository has actually been published.
+
+```text
+GitHub: PENDING
+```
+
+### Live deployment
+
+Add the public deployment URL here after the application has actually been deployed and verified.
+
+```text
+Live URL: PENDING
+```
+
+### Commit history
+
+Actual commit links will be added after the corresponding changes have been committed and pushed. No commit hashes or URLs are fabricated in this document.

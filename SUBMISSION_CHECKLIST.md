@@ -1,11 +1,13 @@
 # TrustVault Submission Checklist
 
-Before submitting, personally verify each item. Do not claim an item is complete until you have tested it.
+Before submitting, personally verify each item. Do not claim an item is complete until you have tested it or have the required evidence.
+
+Do not fabricate commits, test results, deployment status, or historical evidence.
 
 ## Required deliverables
 
 - [ ] Public GitHub repository
-- [ ] Real commit history across the build week
+- [ ] Git history contains only real commits corresponding to work actually performed
 - [ ] Live URL
 - [ ] Seeded demo data
 - [ ] README with setup and credentials
@@ -32,7 +34,7 @@ Before submitting, personally verify each item. Do not claim an item is complete
 - [ ] Revocation works with the same JWT/session
 - [ ] Search does not leak unauthorized metadata
 - [ ] Files are not publicly reachable
-- [ ] Audit chain verifies
+- [ ] Audit chain cryptographically verifies all stored historical events
 - [ ] Automated authorization tests fail if the relevant check is removed
 
 ## Honesty checks
