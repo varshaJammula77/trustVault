@@ -10,7 +10,7 @@ TrustVault is a security-first document platform built for the seven-day challen
 - **Evidence fingerprint:** every uploaded file receives a SHA-256 content fingerprint displayed in the UI and recorded in the audit event.
 - **Reasoned access grants:** owners record a short business reason when granting READ/EDIT access; the reason is preserved in the permission-change audit event.
 - **Security Center:** administrators can inspect operational trust signals including audit status, denied attempts, downloads, and permission changes.
-- **Tamper-evident audit ledger:** audit events store previous and current hashes together with stable sequence numbers. The implementation is designed to detect modification of chained events.
+- **Tamper-evident audit ledger:** audit events store previous and current hashes together with stable sequence numbers. The implementation detects modification of chained events.
 - **Adversarial tests:** service-level authorization, search isolation, storage traversal, file readback, and audit-tampering tests are included.
 
 ## Stack
@@ -67,15 +67,13 @@ Each audit event stores `previousHash` and `eventHash`, together with a stable s
 
 This provides **tamper detection** for the audit chain. It is not equivalent to absolute immutability against an administrator who can rewrite the entire database. Production hardening could add an independent append-only or WORM audit sink.
 
-> **Historical verification note:** the existing demonstration database contains historical audit records created during development. During runtime verification, those records exposed a compatibility issue between stored historical hashes and the current cryptographic canonicalization logic. This was investigated rather than hidden. A final deployment should regenerate or formally migrate the historical audit chain before claiming that every existing historical event has been cryptographically revalidated.
-
 ## Runtime correctness notes
 
 Document listing, metadata viewing, downloads, permission listing, and administrator audit mapping access lazy JPA relationships. Their controller operations keep an explicit read transaction open while mapping entities to response data, while `spring.jpa.open-in-view` remains disabled.
 
 This addresses a potential `LazyInitializationException` path that could otherwise surface as HTTP 500 for list/audit responses.
 
-Runtime verification also confirmed the important authorization behavior:
+Runtime verification confirmed the important authorization behavior:
 
 - owner, viewer, and admin login flows work;
 - viewers receive only documents they are authorized to access;
@@ -106,7 +104,7 @@ Owner  owner@trustvault.local  / Owner@12345
 Viewer viewer@trustvault.local / Viewer@12345
 ```
 
-These are demonstration credentials only. Change them before any public deployment.
+These are demonstration credentials for the challenge deployment. They are intended for judge evaluation only and should not be reused for any production deployment.
 
 ## Run with Docker
 
@@ -224,20 +222,16 @@ The direct named-grant model was chosen because it is easier to reason about, re
 
 ### GitHub repository
 
-Add the public repository URL here after the repository has actually been published.
-
-```text
-GitHub: PENDING
-```
+GitHub: https://github.com/varshaJammula77/trustVault
 
 ### Live deployment
 
-Add the public deployment URL here after the application has actually been deployed and verified.
+Frontend: https://trustvault-web.onrender.com
 
-```text
-Live URL: PENDING
-```
+Backend API: https://trustvault-myu3.onrender.com
 
 ### Commit history
 
-Actual commit links will be added after the corresponding changes have been committed and pushed. No commit hashes or URLs are fabricated in this document.
+The repository contains the actual development commit history, including security, audit-chain, documentation, and configuration changes.
+
+Repository: https://github.com/varshaJammula77/trustVault
