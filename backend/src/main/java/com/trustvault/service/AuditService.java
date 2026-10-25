@@ -54,34 +54,36 @@ public class AuditService {
     }
 
     @Transactional(readOnly = true)
-public boolean verifyChain() {
-    String prev = "GENESIS";
+    public boolean verifyChain() {
 
-    for (AuditEvent e : repo.findAllByOrderBySequenceNumberAsc()) {
+        String previousHash = "GENESIS";
+        long expectedSequence = 1L;
 
-        // Existing audit records may have been created with a timestamp
-        // representation different from the current canonical() method.
-        // The chain relationship itself is still checked using previousHash.
-        if (!Objects.equals(e.getPreviousHash(), prev)) {
-            return false;
+        for (AuditEvent e : repo.findAllByOrderBySequenceNumberAsc()) {
+
+            // Sequence must be continuous.
+            if (!Objects.equals(e.getSequenceNumber(), expectedSequence)) {
+                return false;
+            }
+
+            // Each event must point to the previous event's hash.
+            if (!Objects.equals(e.getPreviousHash(), previousHash)) {
+                return false;
+            }
+
+            // Recalculate the actual SHA-256 hash.
+            String currentHash = sha(e.canonical());
+
+            // Stored hash must exactly match the calculated hash.
+            if (!Objects.equals(e.getEventHash(), currentHash)) {
+                return false;
+            }
+
+            previousHash = e.getEventHash();
+            expectedSequence++;
         }
 
-        prev = e.getEventHash();
-    }
-
-    return true;
-}
-    private String legacyCanonical(AuditEvent e) {
-        return e.getPreviousHash()
-                + "|" + e.getCreatedAt()
-                + "|" + (e.getActor() == null
-                    ? "ANONYMOUS"
-                    : e.getActor().getId())
-                + "|" + e.getAction()
-                + "|" + String.valueOf(e.getDocumentId())
-                + "|" + String.valueOf(e.getTargetUserId())
-                + "|" + String.valueOf(e.getIpAddress())
-                + "|" + e.getDetails();
+        return true;
     }
 
     public String fingerprint(String value) {

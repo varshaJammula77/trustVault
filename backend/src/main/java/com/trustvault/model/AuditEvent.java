@@ -55,7 +55,7 @@ public class AuditEvent {
             String details,
             String previousHash) {
 
-        this.createdAt = Instant.now();
+        this.createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
         this.actor = actor;
         this.action = action;
         this.documentId = documentId;
